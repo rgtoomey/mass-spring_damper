@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spring-Mass-Damper — Heaviside Step Response</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f4f0;
+      --surface: #ffffff;
+      --surface-1: #f7f6f2;
+      --border: rgba(11,11,11,0.12);
+      --border-strong: rgba(11,11,11,0.22);
+      --text-primary: #0b0b0b;
+      --text-secondary: #52514e;
+      --text-muted: #898781;
+      --radius: 8px;
+      --blue: #2a78d6;
+      --green: #1baf7a;
+      --amber: #eda100;
+      --red: #e34948;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #141413;
+        --surface: #1e1e1c;
+        --surface-1: #252523;
+        --border: rgba(255,255,255,0.10);
+        --border-strong: rgba(255,255,255,0.20);
+        --text-primary: #f0efe8;
+        --text-secondary: #c3c2b7;
+        --text-muted: #898781;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 24px 20px;
+    }
+
+    .container { max-width: 900px; margin: 0 auto; }
+
+    header { margin-bottom: 20px; }
+    header h1 { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+    header p { font-size: 13px; color: var(--text-muted); font-family: Georgia, serif; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .metric {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+    }
+    .metric-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .metric-val { font-size: 18px; font-weight: 500; }
+
+    .canvas-row { display: flex; gap: 14px; margin-bottom: 14px; }
+
+    .vis-box {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      flex: 0 0 270px;
+      height: 280px;
+      overflow: hidden;
+    }
+    .vis-box canvas { display: block; }
+
+    .chart-box {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      flex: 1;
+      min-width: 0;
+    }
+    .legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+    .legend span { display: flex; align-items: center; gap: 5px; }
+    .lsq { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+    .chart-wrap { position: relative; height: 166px; }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 6px 16px;
+      font-size: 13px;
+      border-radius: var(--radius);
+      border: 0.5px solid var(--border-strong);
+      background: transparent;
+      color: var(--text-primary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background .15s;
+    }
+    button:hover { background: var(--surface-1); }
+
+    .step-badge {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 12px;
+      border-radius: var(--radius);
+      background: #fef3c7;
+      color: #92400e;
+      border: 0.5px solid #fcd34d;
+    }
+    .step-badge.active {
+      background: #fee2e2;
+      color: #991b1b;
+      border-color: #fca5a5;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .step-badge { background: #3d2e0a; color: #fbbf24; border-color: #92400e; }
+      .step-badge.active { background: #3d0a0a; color: #f87171; border-color: #991b1b; }
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .ctrl-card {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .ctrl-title {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 12px;
+    }
+    .cr {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .cr:last-child { margin-bottom: 0; }
+    .cl { font-size: 13px; color: var(--text-secondary); flex: 0 0 120px; }
+    .cr input[type=range] { flex: 1; accent-color: var(--blue); }
+    .cv { font-size: 13px; font-weight: 500; min-width: 44px; text-align: right; }
+
+    .eq-box {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+    .eq-box strong { color: var(--text-primary); font-weight: 500; }
+
+    @media (max-width: 640px) {
+      .metrics { grid-template-columns: repeat(3, 1fr); }
+      .canvas-row { flex-direction: column; }
+      .vis-box { flex: unset; width: 100%; }
+      .controls { grid-template-columns: 1fr; }
+      .step-badge { margin-left: 0; }
+      .cl { flex: 0 0 100px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Spring-Mass-Damper — Heaviside Step Response</h1>
+    <p>mẍ + cẋ + kx = Δm · g · u(t − t₀)</p>
+  </header>
+
+  <div class="eq-box">
+    Equation of motion:&nbsp;
+    <strong>mẍ + cẋ + kx = Δm · g · u(t − t₀)</strong>
+    &nbsp;— solved with 4th-order Runge-Kutta
+  </div>
+
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">Position x(t) (m)</div><div class="metric-val" id="m-pos">0.000</div></div>
+    <div class="metric"><div class="metric-label">Velocity ẋ(t) (m/s)</div><div class="metric-val" id="m-vel">0.000</div></div>
+    <div class="metric"><div class="metric-label">ωₙ (rad/s)</div><div class="metric-val" id="m-wn">3.16</div></div>
+    <div class="metric"><div class="metric-label">Damping ratio ζ</div><div class="metric-val" id="m-zeta">0.158</div></div>
+    <div class="metric"><div class="metric-label">Gain 1/k (m/N)</div><div class="metric-val" id="m-gain">0.100</div></div>
+  </div>
+
+  <div class="canvas-row">
+    <div class="vis-box">
+      <canvas id="vis-canvas" width="250" height="260"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="legend">
+        <span><span class="lsq" style="background:#2a78d6"></span>x(t) displacement</span>
+        <span><span class="lsq" style="background:#eda100"></span>Δm·g step (scaled)</span>
+        <span><span class="lsq" style="background:#1baf7a"></span>static equilibrium</span>
+      </div>
+      <div class="chart-wrap" style="height:196px">
+        <canvas id="chart-canvas" role="img" aria-label="Time history of mass displacement under Heaviside step forcing"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button id="btn-play">&#9654; Play</button>
+    <button id="btn-pause">&#9646;&#9646; Pause</button>
+    <button id="btn-reset">&#8635; Reset</button>
+    <span class="step-badge" id="step-badge">F = 0 (before step)</span>
+  </div>
+
+  <div class="controls">
+    <div class="ctrl-card">
+      <div class="ctrl-title">System parameters</div>
+      <div class="cr"><span class="cl">Mass m (kg)</span><input type="range" id="s-mass" min="0.5" max="5" step="0.1" value="1"><span class="cv" id="v-mass">1.0</span></div>
+      <div class="cr"><span class="cl">Stiffness k (N/m)</span><input type="range" id="s-k" min="1" max="50" step="0.5" value="10"><span class="cv" id="v-k">10.0</span></div>
+      <div class="cr"><span class="cl">Damping c (Ns/m)</span><input type="range" id="s-c" min="0" max="10" step="0.1" value="1"><span class="cv" id="v-c">1.0</span></div>
+      <div class="cr"><span class="cl">Initial x₀ (m)</span><input type="range" id="s-x0" min="-2" max="2" step="0.05" value="0"><span class="cv" id="v-x0">0.00</span></div>
+    </div>
+    <div class="ctrl-card">
+      <div class="ctrl-title">Added mass &nbsp; F(t) = Δm · g · u(t − t₀)</div>
+      <div class="cr"><span class="cl">Added mass Δm (kg)</span><input type="range" id="s-dm" min="0" max="10" step="0.1" value="2"><span class="cv" id="v-dm">2.0</span></div>
+      <div class="cr"><span class="cl">Step time t₀ (s)</span><input type="range" id="s-t0" min="0" max="5" step="0.1" value="1"><span class="cv" id="v-t0">1.00</span></div>
+      <div class="cr"><span class="cl">Sim duration (s)</span><input type="range" id="s-dur" min="5" max="30" step="1" value="15"><span class="cv" id="v-dur">15</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const gP = id => parseFloat(document.getElementById(id).value);
+const sV = (id, val, d = 2) => { document.getElementById(id).textContent = parseFloat(val).toFixed(d); };
+const isDark = () => matchMedia('(prefers-color-scheme: dark)').matches;
+
+let state = { x: 0, v: 0, t: 0 };
+let running = false, rafId = null, lastWall = null;
+const hist = { t: [], x: [], f: [] };
+
+const G = 9.81; // m/s²
+
+const params = () => ({
+  m: gP('s-mass'), k: gP('s-k'), c: gP('s-c'),
+  x0: gP('s-x0'), dm: gP('s-dm'), t0: gP('s-t0'), dur: gP('s-dur')
+});
+
+const heaviside = (t, t0) => t >= t0 ? 1 : 0;
+const force = (t, p) => p.dm * G * heaviside(t, p.t0);
+
+function rk4(s, p, dt) {
+  const acc = (t, x, v) => (force(t, p) - p.c * v - p.k * x) / p.m;
+  const k1x = s.v, k1v = acc(s.t, s.x, s.v);
+  const k2x = s.v + .5*dt*k1v, k2v = acc(s.t+.5*dt, s.x+.5*dt*k1x, s.v+.5*dt*k1v);
+  const k3x = s.v + .5*dt*k2v, k3v = acc(s.t+.5*dt, s.x+.5*dt*k2x, s.v+.5*dt*k2v);
+  const k4x = s.v + dt*k3v,    k4v = acc(s.t+dt,    s.x+dt*k3x,    s.v+dt*k3v);
+  return {
+    x: s.x + (dt/6)*(k1x + 2*k2x + 2*k3x + k4x),
+    v: s.v + (dt/6)*(k1v + 2*k2v + 2*k3v + k4v),
+    t: s.t + dt
+  };
+}
+
+function reset() {
+  const p = params();
+  state = { x: p.x0, v: 0, t: 0 };
+  hist.t.length = 0; hist.x.length = 0; hist.f.length = 0;
+  updateMetrics(); renderVis(); updateChart();
+}
+
+function updateMetrics() {
+  const p = params();
+  const wn = Math.sqrt(p.k / p.m);
+  const zeta = p.c / (2 * Math.sqrt(p.m * p.k));
+  const gain = p.k !== 0 ? 1 / p.k : Infinity;
+  sV('m-pos', state.x, 3); sV('m-vel', state.v, 3);
+  sV('m-wn', wn, 2); sV('m-zeta', zeta, 3);
+  document.getElementById('m-gain').textContent = isFinite(gain) ? gain.toFixed(3) : '∞';
+
+  const badge = document.getElementById('step-badge');
+  if (state.t < p.t0) {
+    badge.textContent = 'Δm not yet added';
+    badge.classList.remove('active');
+  } else {
+    badge.textContent = 'Δm added — F = ' + (p.dm * G).toFixed(1) + ' N';
+    badge.classList.add('active');
+  }
+}
+
+function renderVis() {
+  const canvas = document.getElementById('vis-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const dark = isDark();
+  const wallC   = dark ? '#383835' : '#c3c2b7';
+  const springC = '#1baf7a';
+  const dampC   = '#eda100';
+  const massC   = '#2a78d6';
+  const forceC  = '#e34948';
+  const textC   = dark ? '#898781' : '#898781';
+  const bgC     = dark ? '#1e1e1c' : '#ffffff';
+
+  ctx.fillStyle = bgC;
+  ctx.fillRect(0, 0, W, H);
+
+  const p = params();
+  const MS = 38;           // mass block side length
+  const CEIL_Y = 14;       // y of ceiling bottom edge
+  const CX = W / 2;        // horizontal centre
+  const NATURAL_TOP = 60;  // y where spring/damper attach to mass at x=0
+  const scale = 22;        // pixels per metre
+
+  const massTopY = Math.max(CEIL_Y + 30, Math.min(H - MS - 30, NATURAL_TOP + state.x * scale));
+  const massBotY = massTopY + MS;
+  const eq = p.k !== 0 ? force(state.t, p) / p.k : 0;
+
+  ctx.fillStyle = wallC;
+  ctx.fillRect(CX - 55, CEIL_Y - 8, 110, 8);
+  for (let i = 0; i < 7; i++) {
+    ctx.beginPath();
+    ctx.moveTo(CX - 50 + i * 16, CEIL_Y - 8);
+    ctx.lineTo(CX - 42 + i * 16, CEIL_Y - 16);
+    ctx.strokeStyle = wallC; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+
+  const sX = CX - 14;
+  const springLen = massTopY - CEIL_Y;
+  const coils = 8;
+  ctx.beginPath(); ctx.moveTo(sX, CEIL_Y);
+  for (let i = 0; i <= coils * 20; i++) {
+    const frac = i / (coils * 20);
+    ctx.lineTo(sX + Math.sin(frac * coils * 2 * Math.PI) * 6, CEIL_Y + frac * springLen);
+  }
+  ctx.strokeStyle = springC; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = textC; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+  ctx.fillText('k', sX - 9, CEIL_Y + springLen * 0.45);
+
+  const dX = CX + 14;
+  const dLen = springLen;
+  ctx.strokeStyle = dampC; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(dX, CEIL_Y); ctx.lineTo(dX, CEIL_Y + dLen * 0.30); ctx.stroke();
+  const bTop = CEIL_Y + dLen * 0.30, bH = dLen * 0.30, bW = 12;
+  ctx.strokeRect(dX - bW/2, bTop, bW, bH);
+  const pistonY = Math.min(bTop + bH - 4, Math.max(bTop + 4, bTop + bH * 0.5 + state.x * 3));
+  ctx.beginPath(); ctx.moveTo(dX - bW/2 + 2, pistonY); ctx.lineTo(dX + bW/2 - 2, pistonY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(dX, bTop + bH); ctx.lineTo(dX, CEIL_Y + dLen); ctx.stroke();
+  ctx.fillStyle = dampC; ctx.textAlign = 'left';
+  ctx.fillText('c', dX + 10, CEIL_Y + dLen * 0.47);
+
+  ctx.fillStyle = massC;
+  ctx.beginPath();
+  ctx.roundRect(CX - MS/2, massTopY, MS, MS, 5);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('m', CX, massTopY + MS/2 + 4);
+
+  const addedActive = state.t >= p.t0;
+  const DMS = 28;
+  const addedMassC = '#e34948';
+  const hookLen = 18;
+
+  if (p.dm > 0.01) {
+    if (addedActive) {
+      ctx.strokeStyle = addedMassC; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(CX, massBotY);
+      ctx.lineTo(CX, massBotY + hookLen - 6);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(CX, massBotY + hookLen - 6);
+      ctx.lineTo(CX, massBotY + hookLen);
+      ctx.arc(CX + 4, massBotY + hookLen, 4, Math.PI, Math.PI * 0.5, true);
+      ctx.strokeStyle = addedMassC; ctx.lineWidth = 1.5; ctx.stroke();
+
+      const dmTopY = massBotY + hookLen + 4;
+      ctx.beginPath();
+      ctx.arc(CX, dmTopY, 3.5, 0, Math.PI * 2);
+      ctx.strokeStyle = addedMassC; ctx.lineWidth = 1.5; ctx.stroke();
+
+      ctx.fillStyle = addedMassC;
+      ctx.beginPath();
+      ctx.roundRect(CX - DMS/2, dmTopY + 3.5, DMS, DMS, 4);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('Δm', CX, dmTopY + 3.5 + DMS/2 + 3);
+
+    } else {
+      const sideX = CX + MS/2 + 36;
+      const sideY = massTopY + MS/2 - DMS/2;
+
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = addedMassC; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(CX, massBotY);
+      ctx.lineTo(sideX - DMS/2, sideY + DMS/2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = addedMassC;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.roundRect(sideX - DMS/2, sideY, DMS, DMS, 4);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('Δm', sideX, sideY + DMS/2 + 3);
+
+      ctx.fillStyle = addedMassC; ctx.font = '9px sans-serif';
+      ctx.fillText('(at t₀)', sideX, sideY + DMS + 11);
+    }
+  }
+
+  if (state.t >= p.t0) {
+    const eqY = Math.max(CEIL_Y + 30, Math.min(H - MS - 30, NATURAL_TOP + eq * scale));
+    ctx.beginPath(); ctx.moveTo(CX - MS/2 - 6, eqY); ctx.lineTo(CX + MS/2 + 6, eqY);
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = forceC; ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = forceC; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText('eq', CX + MS/2 + 8, eqY + 4);
+  }
+  ctx.textAlign = 'left';
+}
+
+let chart = null;
+function initChart() {
+  const dark = isDark();
+  const gridC = dark ? '#2c2c2a' : '#e1e0d9';
+  const tickC = '#898781';
+  chart = new Chart(document.getElementById('chart-canvas').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'x(t)', data: [], borderColor: '#2a78d6', borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3, order: 1 },
+        { label: 'F(t) scaled', data: [], borderColor: '#eda100', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0, borderDash: [5, 4], order: 2 },
+        { label: 'Static eq', data: [], borderColor: '#1baf7a', borderWidth: 1, pointRadius: 0, fill: false, tension: 0, borderDash: [2, 4], order: 3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          type: 'linear',
+          min: 0,
+          ticks: { color: tickC, maxTicksLimit: 8, maxRotation: 0 },
+          grid: { color: gridC },
+          title: { display: true, text: 'Time (s)', color: tickC, font: { size: 11 } }
+        },
+        y: {
+          ticks: { color: tickC },
+          grid: { color: gridC },
+          title: { display: true, text: 'Displacement (m)', color: tickC, font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+function updateChart() {
+  if (!chart) return;
+  const p = params();
+  const F0 = p.dm * G;
+  const eq = p.k !== 0 ? F0 / p.k : 0;
+  chart.data.datasets[0].data = hist.t.map((t, i) => ({ x: t, y: hist.x[i] }));
+  chart.data.datasets[1].data = hist.t.map((t, i) => ({ x: t, y: hist.f[i] }));
+  chart.data.datasets[2].data = hist.t.map(t => ({ x: t, y: t >= p.t0 ? eq : null }));
+  chart.options.scales.x.min = 0;
+  chart.options.scales.x.max = p.dur;
+  chart.update('none');
+}
+
+function loop(ts) {
+  if (!running) return;
+  if (lastWall === null) { lastWall = ts; }
+  const wallDt = Math.min((ts - lastWall) / 1000, 0.05);
+  lastWall = ts;
+  const p = params();
+  const dt = 0.002;
+  const steps = Math.ceil(wallDt / dt);
+  for (let i = 0; i < steps; i++) {
+    if (state.t >= p.dur) { running = false; break; }
+    state = rk4(state, p, dt);
+  }
+  const F = force(state.t, p);
+  const F0 = p.dm * G;
+  const eq = p.k !== 0 ? F0 / p.k : 0;
+  const fScaled = p.k !== 0 ? (F / Math.max(0.001, F0)) * eq : 0;
+  hist.t.push(state.t); hist.x.push(state.x); hist.f.push(fScaled);
+  updateMetrics(); renderVis(); updateChart();
+  if (running) rafId = requestAnimationFrame(loop);
+}
+
+document.getElementById('btn-play').addEventListener('click', () => {
+  if (!running) { running = true; lastWall = null; rafId = requestAnimationFrame(loop); }
+});
+document.getElementById('btn-pause').addEventListener('click', () => { running = false; lastWall = null; });
+document.getElementById('btn-reset').addEventListener('click', () => { running = false; lastWall = null; reset(); });
+
+[
+  ['s-mass','v-mass',1], ['s-k','v-k',1], ['s-c','v-c',1],
+  ['s-x0','v-x0',2], ['s-dm','v-dm',1], ['s-t0','v-t0',2], ['s-dur','v-dur',0]
+].forEach(([sid, vid, dec]) => {
+  document.getElementById(sid).addEventListener('input', () => {
+    sV(vid, gP(sid), dec);
+    if (!running) reset();
+    updateMetrics();
+  });
+});
+
+initChart();
+reset();
+</script>
+</body>
+</html>
